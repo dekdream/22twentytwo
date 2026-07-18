@@ -13,6 +13,15 @@ class QrAttendanceScreen extends StatefulWidget {
 
 class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   bool _saving = false;
+  final _manualQrController = TextEditingController();
+  final _cameraController = MobileScannerController();
+
+  @override
+  void dispose() {
+    _manualQrController.dispose();
+    _cameraController.dispose();
+    super.dispose();
+  }
 
   Future<void> _scan(String? token) async {
     if (_saving || token == null || token.isEmpty) return;
@@ -43,6 +52,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
               fit: StackFit.expand,
               children: [
                 MobileScanner(
+                  controller: _cameraController,
                   fit: BoxFit.cover,
                   onDetect: (capture) =>
                       _scan(capture.barcodes.firstOrNull?.rawValue),
@@ -61,6 +71,35 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
                 ),
                 if (_saving)
                   const Center(child: CircularProgressIndicator(color: Colors.white)),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      color: const Color(0xddffffff),
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _manualQrController,
+                              decoration: const InputDecoration(
+                                hintText: 'กล้องดำ? วาง QR token ที่นี่',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: _saving
+                                ? null
+                                : () => _scan(_manualQrController.text.trim()),
+                            child: const Text('ยืนยัน'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
