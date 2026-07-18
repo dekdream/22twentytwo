@@ -14,7 +14,23 @@ class QrAttendanceScreen extends StatefulWidget {
 class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   bool _saving = false;
   final _manualQrController = TextEditingController();
-  final _cameraController = MobileScannerController();
+  final _cameraController = MobileScannerController(autoStart: false);
+  String _cameraMessage = 'กำลังเปิดกล้อง...';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
+  }
+
+  Future<void> _startCamera() async {
+    setState(() => _cameraMessage = 'กำลังเปิดกล้อง...');
+    try {
+      await _cameraController.start();
+    } catch (error) {
+      if (mounted) setState(() => _cameraMessage = 'เปิดกล้องไม่สำเร็จ: $error');
+    }
+  }
 
   @override
   void dispose() {
@@ -54,6 +70,29 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
                 MobileScanner(
                   controller: _cameraController,
                   fit: BoxFit.cover,
+                  placeholderBuilder: (_, __) => ColoredBox(
+                    color: Colors.black,
+                    child: Center(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const CircularProgressIndicator(color: Colors.white),
+                        const SizedBox(height: 16),
+                        Text(_cameraMessage, style: const TextStyle(color: Colors.white)),
+                        TextButton(onPressed: _startCamera, child: const Text('ลองเปิดกล้องอีกครั้ง')),
+                      ]),
+                    ),
+                  ),
+                  errorBuilder: (_, error, __) => ColoredBox(
+                    color: Colors.black,
+                    child: Center(child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.videocam_off_outlined, color: Colors.white, size: 42),
+                        const SizedBox(height: 12),
+                        Text(error.toString(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                        TextButton(onPressed: _startCamera, child: const Text('ลองใหม่')),
+                      ]),
+                    )),
+                  ),
                   onDetect: (capture) =>
                       _scan(capture.barcodes.firstOrNull?.rawValue),
                 ),
