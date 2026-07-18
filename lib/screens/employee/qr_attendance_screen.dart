@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../services/supabase_service.dart';
+import '../../services/mobile_scanner_registration.dart';
 
 class QrAttendanceScreen extends StatefulWidget {
   const QrAttendanceScreen({super.key, required this.checkIn});
@@ -20,6 +21,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    registerMobileScannerWeb();
     WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
   }
 
