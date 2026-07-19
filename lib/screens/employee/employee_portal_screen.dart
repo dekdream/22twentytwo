@@ -530,12 +530,18 @@ class _EmployeeAttendanceCardState extends State<_EmployeeAttendanceCard> {
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: _saving || checkedIn ? null : () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: true))); if (mounted) setState(() => _attendance = _load()); },
+                  onPressed: _saving || checkedIn ? null : () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: true)));
+                    if (mounted) setState(() { _attendance = _load(); });
+                  },
                   icon: const Icon(Icons.login_rounded),
                   label: const Text('เช็กอิน'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _saving || !checkedIn || checkedOut ? null : () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: false))); if (mounted) setState(() => _attendance = _load()); },
+                  onPressed: _saving || !checkedIn || checkedOut ? null : () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: false)));
+                    if (mounted) setState(() { _attendance = _load(); });
+                  },
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('เช็กเอาต์'),
                 ),

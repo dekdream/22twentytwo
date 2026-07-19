@@ -25,8 +25,16 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
   }
 
   Future<void> _startCamera() async {
+    if (!mounted) return;
     setState(() => _cameraMessage = 'กำลังเปิดกล้อง...');
     try {
+      // A previous scanner/tab can leave a stream open on web. Release it
+      // before requesting the rear camera again.
+      try {
+        await _cameraController.stop();
+      } catch (_) {
+        // The first start has no active stream to stop.
+      }
       await _cameraController.start();
     } catch (error) {
       if (mounted) setState(() => _cameraMessage = 'เปิดกล้องไม่สำเร็จ: $error');
@@ -44,6 +52,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
     if (_saving || token == null || token.isEmpty) return;
     final employee = EmployeeSession.current;
     if (employee == null || employee['id'] == null || employee['branch_id'] == null) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() => _saving = true);
     try {
       await hrRepository.verifyQrAttendance(
@@ -54,7 +63,9 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen> {
       );
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))));
+      messenger?.showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
