@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -357,7 +356,7 @@ class HrRepository {
 
   Future<Map<String, dynamic>> createAttendanceQr(Object branchId) async {
     final token = _uuid.v4();
-    final expiresAt = DateTime.now().add(const Duration(minutes: 5));
+    final expiresAt = DateTime.now().add(const Duration(seconds: 20));
     return Map<String, dynamic>.from(await _client
         .from('attendance_qr_sessions')
         .insert({'branch_id': branchId, 'token': token, 'expires_at': expiresAt.toIso8601String()})
@@ -369,31 +368,21 @@ class HrRepository {
     required Object employeeId,
     required Object branchId,
     required String token,
-    required double latitude,
-    required double longitude,
     required bool checkIn,
   }) async {
     final session = await _client.from('attendance_qr_sessions')
-        .select('*, branches(latitude, longitude, attendance_radius_m)')
+        .select()
         .eq('token', token).maybeSingle();
     if (session == null || session['branch_id']?.toString() != branchId.toString() ||
         DateTime.tryParse(session['expires_at']?.toString() ?? '')?.isBefore(DateTime.now()) != false) {
       throw StateError('QR is invalid or expired.');
     }
-    final branch = session['branches'] as Map?;
-    final branchLat = (branch?['latitude'] as num?)?.toDouble();
-    final branchLng = (branch?['longitude'] as num?)?.toDouble();
-    if (branchLat == null || branchLng == null) throw StateError('Branch location is not configured.');
-    final distance = _distanceMeters(latitude, longitude, branchLat, branchLng);
-    if (distance > ((branch?['attendance_radius_m'] as num?)?.toDouble() ?? 100)) {
-      throw StateError('You are ${distance.round()}m from the branch.');
-    }
     final now = DateTime.now();
     final workDate = now.toIso8601String().substring(0, 10);
     final existing = await _client.from('attendance').select().eq('employee_id', employeeId).eq('work_date', workDate).maybeSingle();
     final data = checkIn
-        ? {'check_in': now.toIso8601String(), 'status': 'Present', 'check_in_latitude': latitude, 'check_in_longitude': longitude, 'check_in_distance_m': distance, 'qr_session_id': session['id']}
-        : {'check_out': now.toIso8601String(), 'check_out_latitude': latitude, 'check_out_longitude': longitude, 'check_out_distance_m': distance, 'qr_session_id': session['id']};
+        ? {'check_in': now.toIso8601String(), 'status': 'Present', 'qr_session_id': session['id']}
+        : {'check_out': now.toIso8601String(), 'qr_session_id': session['id']};
     if (existing == null && checkIn) {
       await _client.from('attendance').insert({...data, 'employee_id': employeeId, 'work_date': workDate});
     } else if (existing == null || (checkIn ? existing['check_in'] != null : existing['check_out'] != null)) {
@@ -401,15 +390,6 @@ class HrRepository {
     } else {
       await update('attendance', existing['id'], data);
     }
-  }
-
-  double _distanceMeters(double lat1, double lon1, double lat2, double lon2) {
-    const earthRadius = 6371000.0;
-    double radians(double value) => value * 3.141592653589793 / 180;
-    final dLat = radians(lat2 - lat1), dLng = radians(lon2 - lon1);
-    final a = math.pow(math.sin(dLat / 2), 2) +
-        math.cos(radians(lat1)) * math.cos(radians(lat2)) * math.pow(math.sin(dLng / 2), 2);
-    return earthRadius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   Future<int> count(String table) async {

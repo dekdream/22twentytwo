@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -87,33 +89,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกสาขาก่อนสร้าง QR')));
       return;
     }
-    try {
-      final qr = await hrRepository.createAttendanceQr(branchId);
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('QR ลงเวลา (หมดอายุใน 5 นาที)'),
-          content: SizedBox(
-            width: 280,
-            height: 320,
-            child: Column(
-              children: [
-                SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: QrImageView(data: qr['token'].toString()),
-                ),
-                const SizedBox(height: 14),
-                const Text('ให้พนักงานสแกนจากมือถือ'),
-              ],
-            ),
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่สามารถสร้าง QR ได้')));
-    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _RotatingBranchQrDialog(branchId: branchId),
+    );
   }
 
   static String _employeeLabel(Map<String, dynamic> employee) {
@@ -146,6 +125,72 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ),
               const SizedBox(height: 20),
               Expanded(child: _AttendanceTable(key: ValueKey(_refreshKey))),
+            ],
+          ),
+        ),
+      );
+}
+
+class _RotatingBranchQrDialog extends StatefulWidget {
+  const _RotatingBranchQrDialog({required this.branchId});
+
+  final Object branchId;
+
+  @override
+  State<_RotatingBranchQrDialog> createState() => _RotatingBranchQrDialogState();
+}
+
+class _RotatingBranchQrDialogState extends State<_RotatingBranchQrDialog> {
+  Timer? _refreshTimer;
+  String? _token;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshQr();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) => _refreshQr());
+  }
+
+  Future<void> _refreshQr() async {
+    try {
+      final qr = await hrRepository.createAttendanceQr(widget.branchId);
+      if (mounted) setState(() {
+        _token = qr['token'].toString();
+        _error = null;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('QR ลงเวลา'),
+        content: SizedBox(
+          width: 280,
+          height: 320,
+          child: Column(
+            children: [
+              SizedBox(
+                width: 240,
+                height: 240,
+                child: _token != null
+                    ? QrImageView(data: _token!)
+                    : Center(
+                        child: _error == null
+                            ? const CircularProgressIndicator()
+                            : Text('ไม่สามารถสร้าง QR ได้: $_error', textAlign: TextAlign.center),
+                      ),
+              ),
+              const SizedBox(height: 14),
+              const Text('QR จะเปลี่ยนใหม่ทุก 20 วินาที'),
             ],
           ),
         ),
