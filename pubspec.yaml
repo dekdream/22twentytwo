@@ -16,7 +16,9 @@ dependencies:
   image_picker: ^1.1.2
   cached_network_image: ^3.4.1
   uuid: ^4.5.1
-  mobile_scanner: ^5.2.3
+  # Version 6 updates the web scanner (ZXing) and fixes blank previews when
+  # reopening the camera.
+  mobile_scanner: ^6.0.8
   qr_flutter: ^4.1.0
   cupertino_icons: ^1.0.8
 
