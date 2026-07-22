@@ -24,6 +24,11 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     );
     if (values == null || values['title']!.isEmpty) return;
     await hrRepository.insert('announcements', values);
+    await hrRepository.insert('notifications', {
+      'title': 'มีประกาศใหม่',
+      'message': values['title'],
+      'notification_type': 'Announcement',
+    });
     setState(() {});
   }
 

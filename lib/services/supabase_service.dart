@@ -4,6 +4,20 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+/// Thai labels for the seeded position names. Keeping the stored names intact
+/// avoids breaking existing employee/position relationships.
+String localizedPositionName(Object? value) {
+  final name = value?.toString().trim() ?? '';
+  return switch (name) {
+    'Trainee' => 'พนักงานฝึกหัด',
+    'Senior Nail Artist' => 'ช่างทำเล็บอาวุโส',
+    'Nail Artist' => 'ช่างทำเล็บ',
+    'Owner' => 'เจ้าของร้าน',
+    'Administrator' => 'ผู้ดูแลระบบ',
+    _ => name.isEmpty ? '-' : name,
+  };
+}
+
 class SupabaseService {
   static const url = String.fromEnvironment(
     'SUPABASE_URL',
@@ -62,13 +76,23 @@ class HrRepository {
     String table, {
     String? orderBy,
     Object? branchId,
+    String? employeeForeignKey,
+    String? workDate,
+    String? workDateFrom,
+    String? workDateTo,
   }) async {
     if (!SupabaseService.isConfigured) return [];
+    final employeeRelation = employeeForeignKey == null
+        ? 'employees'
+        : 'employees!$employeeForeignKey';
     var query = _client.from(table).select(
           branchId == null
-              ? '*, employees(employee_code, first_name, last_name, branches(branch_code, branch_name))'
-              : '*, employees!inner(employee_code, first_name, last_name, branch_id, branches(branch_code, branch_name))',
+              ? '*, $employeeRelation(employee_code, first_name, last_name, branches(branch_code, branch_name))'
+              : '*, $employeeRelation!inner(employee_code, first_name, last_name, branch_id, branches(branch_code, branch_name))',
         );
+    if (workDate != null) query = query.eq('work_date', workDate);
+    if (workDateFrom != null) query = query.gte('work_date', workDateFrom);
+    if (workDateTo != null) query = query.lte('work_date', workDateTo);
     if (branchId != null) {
       if (orderBy != null) {
         return List<Map<String, dynamic>>.from(
@@ -197,7 +221,8 @@ class HrRepository {
     Map<String, dynamic> data,
   ) async {
     final scopedData = Map<String, dynamic>.from(data);
-    if (EmployeeSession.isAdmin && (table == 'employees' || table == 'customers')) {
+    if (EmployeeSession.isAdmin &&
+        (table == 'employees' || table == 'customers')) {
       scopedData['branch_id'] = EmployeeSession.branchId;
     }
     return Map<String, dynamic>.from(
@@ -234,9 +259,8 @@ class HrRepository {
     required Uint8List bytes,
     required String fileName,
   }) async {
-    final extension = fileName.contains('.')
-        ? fileName.split('.').last.toLowerCase()
-        : 'jpg';
+    final extension =
+        fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'jpg';
     final safeExtension = switch (extension) {
       'png' || 'webp' || 'gif' || 'jpg' || 'jpeg' => extension,
       _ => 'jpg',
@@ -248,7 +272,8 @@ class HrRepository {
       _ => 'image/jpeg',
     };
     // A changing filename prevents clients from displaying an old cached photo.
-    final path = 'employees/$employeeId/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+    final path =
+        'employees/$employeeId/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
     final storage = _client.storage.from('profile');
     await storage.uploadBinary(
       path,
@@ -307,6 +332,71 @@ class HrRepository {
     );
   }
 
+  Future<List<Map<String, dynamic>>> listServiceReport(
+      {Object? branchId}) async {
+    if (!SupabaseService.isConfigured) return [];
+    var query = _client.from('service_history').select(
+          branchId == null
+              ? '*, services(name), employees(first_name, last_name, employee_code, branches(branch_name))'
+              : '*, services(name), employees!inner(first_name, last_name, employee_code, branch_id, branches(branch_name))',
+        );
+    if (branchId != null) query = query.eq('employees.branch_id', branchId);
+    return List<Map<String, dynamic>>.from(
+      await query.order('service_date', ascending: false),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listCalendarEvents(
+      {Object? branchId}) async {
+    if (!SupabaseService.isConfigured) return [];
+    var query = _client.from('calendar_events').select();
+    if (branchId != null) query = query.eq('branch_id', branchId);
+    return List<Map<String, dynamic>>.from(await query.order('start_date'));
+  }
+
+  Future<List<Map<String, dynamic>>> listEmployeeLeave(
+      Object employeeId) async {
+    if (!SupabaseService.isConfigured) return [];
+    return List<Map<String, dynamic>>.from(await _client
+        .from('leave_requests')
+        .select('*, leave_type(name)')
+        .eq('employee_id', employeeId)
+        .order('created_at', ascending: false));
+  }
+
+  Future<List<Map<String, dynamic>>> listApprovedLeaveForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+    Object? branchId,
+  }) async {
+    if (!SupabaseService.isConfigured) return [];
+    final start = startDate.toIso8601String().substring(0, 10);
+    final end = endDate.toIso8601String().substring(0, 10);
+    var query = _client.from('leave_requests').select(
+          branchId == null
+              ? '*'
+              : '*, employees!leave_requests_employee_id_fkey!inner(branch_id)',
+        );
+    query = query
+        .eq('status', 'Approved')
+        .lte('start_date', end)
+        .gte('end_date', start);
+    if (branchId != null) {
+      query = query.eq('employees.branch_id', branchId);
+    }
+    return List<Map<String, dynamic>>.from(await query);
+  }
+
+  Future<List<Map<String, dynamic>>> listEmployeeNotifications(
+      Object employeeId) async {
+    if (!SupabaseService.isConfigured) return [];
+    return List<Map<String, dynamic>>.from(await _client
+        .from('notifications')
+        .select()
+        .or('employee_id.eq.$employeeId,employee_id.is.null')
+        .order('created_at', ascending: false));
+  }
+
   Future<Map<String, dynamic>?> employeeAttendanceForDate(
     Object employeeId,
     DateTime date,
@@ -318,6 +408,20 @@ class HrRepository {
         .eq('employee_id', employeeId)
         .eq('work_date', workDate)
         .maybeSingle();
+  }
+
+  Future<List<Map<String, dynamic>>> listEmployeeAttendanceForRange({
+    required Object employeeId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    if (!SupabaseService.isConfigured) return [];
+    return List<Map<String, dynamic>>.from(await _client
+        .from('attendance')
+        .select()
+        .eq('employee_id', employeeId)
+        .gte('work_date', startDate.toIso8601String().substring(0, 10))
+        .lte('work_date', endDate.toIso8601String().substring(0, 10)));
   }
 
   Future<void> employeeCheckIn(Object employeeId) async {
@@ -341,8 +445,42 @@ class HrRepository {
     });
   }
 
+  Future<void> saveAttendanceStatus({
+    required Object employeeId,
+    required DateTime workDate,
+    required String status,
+    DateTime? checkIn,
+  }) async {
+    final existing = await employeeAttendanceForDate(employeeId, workDate);
+    final data = <String, dynamic>{
+      'status': status,
+      'check_in': status == 'Present' || status == 'Late'
+          ? checkIn?.toIso8601String()
+          : null,
+    };
+    if (existing == null) {
+      await _client.from('attendance').insert({
+        ...data,
+        'employee_id': employeeId,
+        'work_date': workDate.toIso8601String().substring(0, 10),
+      });
+      return;
+    }
+    await update('attendance', existing['id'], data);
+  }
+
+  Future<void> updateAttendanceStatus(
+      Object attendanceId, String status) async {
+    await update('attendance', attendanceId, {
+      'status': status,
+      if (status == 'Absent' || status == 'Leave') 'check_in': null,
+      if (status == 'Absent' || status == 'Leave') 'check_out': null,
+    });
+  }
+
   Future<void> employeeCheckOut(Object employeeId) async {
-    final existing = await employeeAttendanceForDate(employeeId, DateTime.now());
+    final existing =
+        await employeeAttendanceForDate(employeeId, DateTime.now());
     if (existing == null || existing['check_in'] == null) {
       throw StateError('Check in before checking out.');
     }
@@ -355,13 +493,46 @@ class HrRepository {
   }
 
   Future<Map<String, dynamic>> createAttendanceQr(Object branchId) async {
+    await _deleteExpiredUnusedAttendanceQrs(branchId);
     final token = _uuid.v4();
     final expiresAt = DateTime.now().add(const Duration(seconds: 20));
     return Map<String, dynamic>.from(await _client
         .from('attendance_qr_sessions')
-        .insert({'branch_id': branchId, 'token': token, 'expires_at': expiresAt.toIso8601String()})
+        .insert({
+          'branch_id': branchId,
+          'token': token,
+          'expires_at': expiresAt.toIso8601String()
+        })
         .select()
         .single());
+  }
+
+  /// Removes expired QR sessions that have never been used for attendance.
+  /// Sessions referenced by attendance are retained as an audit trail.
+  Future<void> _deleteExpiredUnusedAttendanceQrs(Object branchId) async {
+    final expired = List<Map<String, dynamic>>.from(await _client
+        .from('attendance_qr_sessions')
+        .select('id')
+        .eq('branch_id', branchId)
+        .lt('expires_at', DateTime.now().toIso8601String()));
+    if (expired.isEmpty) return;
+
+    final ids = expired.map((item) => item['id'].toString()).toList();
+    final attendance = List<Map<String, dynamic>>.from(await _client
+        .from('attendance')
+        .select('qr_session_id')
+        .inFilter('qr_session_id', ids));
+    final usedIds = attendance
+        .map((item) => item['qr_session_id']?.toString())
+        .whereType<String>()
+        .toSet();
+    for (final id in ids.where((id) => !usedIds.contains(id))) {
+      await _client.from('attendance_qr_sessions').delete().eq('id', id);
+    }
+  }
+
+  Future<void> deleteAttendanceQr(Object sessionId) async {
+    await _client.from('attendance_qr_sessions').delete().eq('id', sessionId);
   }
 
   Future<void> verifyQrAttendance({
@@ -370,23 +541,44 @@ class HrRepository {
     required String token,
     required bool checkIn,
   }) async {
-    final session = await _client.from('attendance_qr_sessions')
+    final session = await _client
+        .from('attendance_qr_sessions')
         .select()
-        .eq('token', token).maybeSingle();
-    if (session == null || session['branch_id']?.toString() != branchId.toString() ||
-        DateTime.tryParse(session['expires_at']?.toString() ?? '')?.isBefore(DateTime.now()) != false) {
+        .eq('token', token)
+        .maybeSingle();
+    if (session == null ||
+        session['branch_id']?.toString() != branchId.toString() ||
+        DateTime.tryParse(session['expires_at']?.toString() ?? '')
+                ?.isBefore(DateTime.now()) !=
+            false) {
       throw StateError('QR is invalid or expired.');
     }
     final now = DateTime.now();
     final workDate = now.toIso8601String().substring(0, 10);
-    final existing = await _client.from('attendance').select().eq('employee_id', employeeId).eq('work_date', workDate).maybeSingle();
+    final existing = await _client
+        .from('attendance')
+        .select()
+        .eq('employee_id', employeeId)
+        .eq('work_date', workDate)
+        .maybeSingle();
     final data = checkIn
-        ? {'check_in': now.toIso8601String(), 'status': 'Present', 'qr_session_id': session['id']}
+        ? {
+            'check_in': now.toIso8601String(),
+            'status': 'Present',
+            'qr_session_id': session['id']
+          }
         : {'check_out': now.toIso8601String(), 'qr_session_id': session['id']};
     if (existing == null && checkIn) {
-      await _client.from('attendance').insert({...data, 'employee_id': employeeId, 'work_date': workDate});
-    } else if (existing == null || (checkIn ? existing['check_in'] != null : existing['check_out'] != null)) {
-      throw StateError(checkIn ? 'Already checked in today.' : 'Check in first, or you already checked out.');
+      await _client
+          .from('attendance')
+          .insert({...data, 'employee_id': employeeId, 'work_date': workDate});
+    } else if (existing == null ||
+        (checkIn
+            ? existing['check_in'] != null
+            : existing['check_out'] != null)) {
+      throw StateError(checkIn
+          ? 'Already checked in today.'
+          : 'Check in first, or you already checked out.');
     } else {
       await update('attendance', existing['id'], data);
     }

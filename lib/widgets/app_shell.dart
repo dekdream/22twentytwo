@@ -19,9 +19,9 @@ class _AppShellState extends State<AppShell> {
     _NavItem('แดชบอร์ด', '/', Icons.dashboard_outlined),
     _NavItem('ลงเวลา', '/attendance', Icons.schedule_outlined),
     _NavItem('ลางาน', '/leave', Icons.event_note_outlined),
+    _NavItem('ปฏิทิน', '/calendar', Icons.calendar_month_outlined),
     _NavItem('พนักงาน', '/employees', Icons.badge_outlined),
     _NavItem('แผนก', '/departments', Icons.apartment_outlined),
-    _NavItem('ตำแหน่ง', '/positions', Icons.work_outline),
     _NavItem('เงินเดือน', '/payroll', Icons.payments_outlined),
     _NavItem('ค่าคอม', '/commissions', Icons.percent_outlined),
     _NavItem('โปรไฟล์', '/profile', Icons.person_outline),
@@ -38,6 +38,8 @@ class _AppShellState extends State<AppShell> {
     _NavItem('ลูกค้า', '/customers', Icons.groups_2_outlined),
     _NavItem('สาขา', '/branches', Icons.store_outlined),
     _NavItem('ประกาศ', '/announcements', Icons.campaign_outlined),
+    _NavItem('รายงานยอดขาย', '/reports', Icons.analytics_outlined),
+    _NavItem('ปฏิทิน', '/calendar', Icons.calendar_month_outlined),
   ];
 
   @override
@@ -127,14 +129,24 @@ class _AppShellState extends State<AppShell> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(13),
-              child: Image.asset('assets/images/twenty_two_studio.jpg', width: 42, height: 42, fit: BoxFit.cover),
+              child: Image.asset('assets/images/twenty_two_studio.jpg',
+                  width: 42, height: 42, fit: BoxFit.cover),
             ),
             const SizedBox(width: 11),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Twenty Two', style: TextStyle(color: Color(0xff252437), fontSize: 17, fontWeight: FontWeight.w800)),
-                const Text('MANAGEMENT', style: TextStyle(color: Color(0xffa09daf), fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.4)),
+                const Text('Twenty Two',
+                    style: TextStyle(
+                        color: Color(0xff252437),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800)),
+                const Text('MANAGEMENT',
+                    style: TextStyle(
+                        color: Color(0xffa09daf),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4)),
               ],
             ),
           ],

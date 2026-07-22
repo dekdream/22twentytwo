@@ -21,29 +21,27 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
       orderBy: 'branch_code',
       branchId: EmployeeSession.activeBranchId,
     );
-    final assignableDepartments = EmployeeSession.isAdmin
-        ? departments
-            .where((department) =>
-                department['id']?.toString() ==
-                EmployeeSession.employeeDepartmentId.toString())
-            .toList()
-        : departments;
     if (!mounted) return;
     final values = await showRecordDialog(
       context,
-      title: 'Add Employee',
+      title: 'เพิ่มพนักงาน',
       fields: [
         const FieldConfig(
           'profile_image_path',
-          'Add profile image',
+          'เลือกรูปโปรไฟล์',
           isImagePicker: true,
         ),
-        FieldConfig('employee_code', 'Employee Code'),
-        FieldConfig('first_name', 'First Name'),
-        FieldConfig('last_name', 'Last Name'),
-        FieldConfig('email', 'Email', keyboardType: TextInputType.emailAddress),
-        FieldConfig('phone', 'Phone'),
-        FieldConfig('branch_id', 'Branch', options: [
+        FieldConfig('employee_code', 'รหัสพนักงาน'),
+        FieldConfig('first_name', 'ชื่อ'),
+        FieldConfig('last_name', 'นามสกุล'),
+        FieldConfig('email', 'อีเมล', keyboardType: TextInputType.emailAddress),
+        FieldConfig('phone', 'โทรศัพท์'),
+        FieldConfig(
+          'base_salary',
+          'ฐานเงินเดือน',
+          keyboardType: TextInputType.number,
+        ),
+        FieldConfig('branch_id', 'สาขา', options: [
           for (final branch in branches)
             FieldOption(
               value: branch['id'].toString(),
@@ -51,18 +49,18 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
                   '${branch['branch_code'] ?? ''} - ${branch['branch_name'] ?? '-'}',
             ),
         ]),
-        FieldConfig('department_id', 'Department', options: [
-          for (final department in assignableDepartments)
+        FieldConfig('department_id', 'แผนก', options: [
+          for (final department in departments)
             FieldOption(
               value: department['id'].toString(),
               label: department['name']?.toString() ?? '-',
             ),
         ]),
-        FieldConfig('position_id', 'Position', options: [
+        FieldConfig('position_id', 'ตำแหน่ง', options: [
           for (final position in positions)
             FieldOption(
               value: position['id'].toString(),
-              label: position['name']?.toString() ?? '-',
+              label: localizedPositionName(position['name']),
             ),
         ]),
       ],
@@ -76,6 +74,7 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
       'branch_id': int.tryParse(values['branch_id'] ?? ''),
       'department_id': int.tryParse(values['department_id'] ?? ''),
       'position_id': int.tryParse(values['position_id'] ?? ''),
+      'base_salary': double.tryParse(values['base_salary'] ?? '') ?? 0,
       'hire_date': DateTime.now().toIso8601String().substring(0, 10),
       'status': 'Active',
     });
@@ -104,12 +103,12 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
   @override
   Widget build(BuildContext context) {
     return HrPage(
-      title: 'Employees',
+      title: 'พนักงาน',
       subtitle: 'ข้อมูลพนักงาน ประวัติ และสถานะการทำงาน',
       action: FilledButton.icon(
           onPressed: addEmployee,
           icon: const Icon(Icons.add),
-          label: const Text('Add')),
+          label: const Text('เพิ่ม')),
       child: RecordCards(
         tableName: 'employees',
         onChanged: () => setState(() {}),
@@ -119,7 +118,8 @@ class _EmployeeScreenState extends State<EmployeeScreen> {
         ),
         builder: (context, row, onTap) => RecordCard(
           title: '${row['first_name'] ?? ''} ${row['last_name'] ?? ''}'.trim(),
-          subtitle: '${row['employee_code'] ?? '-'} • ${_relationName(row['positions'])}',
+          subtitle:
+              '${row['employee_code'] ?? '-'} • ${localizedPositionName(_relationName(row['positions']))}',
           trailing: '${row['status'] ?? 'Active'}',
           icon: Icons.badge_outlined,
           imageUrl: row['profile_image']?.toString(),

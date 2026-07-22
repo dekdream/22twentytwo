@@ -55,6 +55,171 @@ class _EmployeePortalScreenState extends State<EmployeePortalScreen> {
     context.go('/login');
   }
 
+  Future<void> _openEmployeeMenu() async {
+    final employeeId = _employee['id'];
+    if (employeeId == null) return;
+    final choice = await showModalBottomSheet<String>(
+        context: context,
+        builder: (context) => SafeArea(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const ListTile(
+                  title: Text('เมนูพนักงาน',
+                      style: TextStyle(fontWeight: FontWeight.bold))),
+              ListTile(
+                  leading:
+                      const Icon(Icons.event_note, color: Color(0xffd4537e)),
+                  title: const Text('ส่งคำขอลางาน'),
+                  onTap: () => Navigator.pop(context, 'leave')),
+              ListTile(
+                  leading: const Icon(Icons.notifications_outlined,
+                      color: Color(0xffd4537e)),
+                  title: const Text('การแจ้งเตือน'),
+                  onTap: () => Navigator.pop(context, 'notifications')),
+              ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined,
+                      color: Color(0xffd4537e)),
+                  title: const Text('ปฏิทินงานและวันหยุด'),
+                  onTap: () => Navigator.pop(context, 'calendar')),
+            ])));
+    if (!mounted) return;
+    if (choice == 'leave') await _requestLeave(employeeId);
+    if (choice == 'notifications') await _showNotifications(employeeId);
+    if (choice == 'calendar') await _showCalendar();
+  }
+
+  Future<void> _requestLeave(Object employeeId) async {
+    final types = await hrRepository.list('leave_type', orderBy: 'name');
+    if (!mounted || types.isEmpty) return;
+    Object? typeId = types.first['id'];
+    DateTime start = DateTime.now(), end = DateTime.now();
+    final reason = TextEditingController();
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+            builder: (context, setLocal) => AlertDialog(
+                    title: const Text('ส่งคำขอลางาน'),
+                    content: SizedBox(
+                        width: 420,
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          DropdownButtonFormField<Object>(
+                              value: typeId,
+                              decoration: const InputDecoration(
+                                  labelText: 'ประเภทการลา'),
+                              items: [
+                                for (final t in types)
+                                  DropdownMenuItem(
+                                      value: t['id'],
+                                      child: Text('${t['name']}'))
+                              ],
+                              onChanged: (v) => setLocal(() => typeId = v)),
+                          ListTile(
+                              title: Text(
+                                  'เริ่ม ${DateFormat('dd/MM/yyyy').format(start)}'),
+                              onTap: () async {
+                                final d = await showDatePicker(
+                                    context: context,
+                                    initialDate: start,
+                                    firstDate: DateTime.now(),
+                                    lastDate: DateTime(2100));
+                                if (d != null) setLocal(() => start = d);
+                              }),
+                          ListTile(
+                              title: Text(
+                                  'ถึง ${DateFormat('dd/MM/yyyy').format(end)}'),
+                              onTap: () async {
+                                final d = await showDatePicker(
+                                    context: context,
+                                    initialDate: end,
+                                    firstDate: start,
+                                    lastDate: DateTime(2100));
+                                if (d != null) setLocal(() => end = d);
+                              }),
+                          TextField(
+                              controller: reason,
+                              maxLines: 3,
+                              decoration:
+                                  const InputDecoration(labelText: 'เหตุผล')),
+                        ])),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('ยกเลิก')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('ส่งคำขอ'))
+                    ])));
+    if (ok == true) {
+      await hrRepository.insert('leave_requests', {
+        'employee_id': employeeId,
+        'leave_type_id': typeId,
+        'start_date': DateFormat('yyyy-MM-dd').format(start),
+        'end_date': DateFormat('yyyy-MM-dd').format(end),
+        'reason': reason.text,
+        'status': 'Pending'
+      });
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('ส่งคำขอแล้ว รอผู้จัดการอนุมัติ')));
+    }
+  }
+
+  Future<void> _showNotifications(Object employeeId) async {
+    final data = await hrRepository.listEmployeeNotifications(employeeId);
+    if (!mounted) return;
+    await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('การแจ้งเตือน'),
+                content: SizedBox(
+                    width: 480,
+                    height: 420,
+                    child: data.isEmpty
+                        ? const Center(child: Text('ยังไม่มีการแจ้งเตือน'))
+                        : ListView(children: [
+                            for (final n in data)
+                              ListTile(
+                                  leading: const Icon(Icons.notifications,
+                                      color: Color(0xffd4537e)),
+                                  title: Text('${n['title']}'),
+                                  subtitle: Text('${n['message'] ?? ''}'))
+                          ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('ปิด'))
+                ]));
+  }
+
+  Future<void> _showCalendar() async {
+    final data =
+        await hrRepository.listCalendarEvents(branchId: _employee['branch_id']);
+    if (!mounted) return;
+    await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('ปฏิทินงานและวันหยุด'),
+                content: SizedBox(
+                    width: 480,
+                    height: 420,
+                    child: data.isEmpty
+                        ? const Center(child: Text('ยังไม่มีรายการ'))
+                        : ListView(children: [
+                            for (final e in data)
+                              ListTile(
+                                  leading: const Icon(Icons.event,
+                                      color: Color(0xffd4537e)),
+                                  title: Text('${e['title']}'),
+                                  subtitle: Text(
+                                      '${e['start_date']} • ${e['detail'] ?? ''}'))
+                          ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('ปิด'))
+                ]));
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.sizeOf(context).width >= 920;
@@ -131,6 +296,10 @@ class _EmployeePortalScreenState extends State<EmployeePortalScreen> {
                   ),
               ],
             ),
+      floatingActionButton: FloatingActionButton.extended(
+          onPressed: _openEmployeeMenu,
+          icon: const Icon(Icons.add_alert_outlined),
+          label: const Text('คำขอ / แจ้งเตือน')),
     );
   }
 }
@@ -330,6 +499,8 @@ class _HomePage extends StatelessWidget {
           _WelcomeBanner(employee: employee),
           const SizedBox(height: 16),
           _EmployeeAttendanceCard(employeeId: employee['id']),
+          const SizedBox(height: 16),
+          _EmployeeMonthlyAttendanceCard(employeeId: employee['id']),
           const SizedBox(height: 24),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -441,7 +612,8 @@ class _EmployeeAttendanceCard extends StatefulWidget {
   final Object? employeeId;
 
   @override
-  State<_EmployeeAttendanceCard> createState() => _EmployeeAttendanceCardState();
+  State<_EmployeeAttendanceCard> createState() =>
+      _EmployeeAttendanceCardState();
 }
 
 class _EmployeeAttendanceCardState extends State<_EmployeeAttendanceCard> {
@@ -474,7 +646,8 @@ class _EmployeeAttendanceCardState extends State<_EmployeeAttendanceCard> {
       if (!mounted) return;
       setState(() => _attendance = _load());
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(checkIn ? 'เช็กอินเรียบร้อย' : 'เช็กเอาต์เรียบร้อย')),
+        SnackBar(
+            content: Text(checkIn ? 'เช็กอินเรียบร้อย' : 'เช็กเอาต์เรียบร้อย')),
       );
     } on StateError catch (error) {
       if (mounted) {
@@ -517,31 +690,55 @@ class _EmployeeAttendanceCardState extends State<_EmployeeAttendanceCard> {
               runSpacing: 12,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                const Icon(Icons.schedule_rounded, color: Color(0xffd4537e), size: 30),
+                const Icon(Icons.schedule_rounded,
+                    color: Color(0xffd4537e), size: 30),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(minWidth: 200, maxWidth: 460),
+                  constraints:
+                      const BoxConstraints(minWidth: 200, maxWidth: 460),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('ลงเวลาทำงานวันนี้', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                      Text('เข้า ${_time(row?['check_in'])}  •  ออก ${_time(row?['check_out'])}', style: const TextStyle(color: Color(0xff8e8c9d))),
+                      const Text('ลงเวลาทำงานวันนี้',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 16)),
+                      Text(
+                          'เข้า ${_time(row?['check_in'])}  •  ออก ${_time(row?['check_out'])}',
+                          style: const TextStyle(color: Color(0xff8e8c9d))),
                     ],
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: _saving || checkedIn ? null : () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: true)));
-                    if (mounted) setState(() { _attendance = _load(); });
-                  },
+                  onPressed: _saving || checkedIn
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const QrAttendanceScreen(checkIn: true)));
+                          if (mounted)
+                            setState(() {
+                              _attendance = _load();
+                            });
+                        },
                   icon: const Icon(Icons.login_rounded),
                   label: const Text('เช็กอิน'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: _saving || !checkedIn || checkedOut ? null : () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const QrAttendanceScreen(checkIn: false)));
-                    if (mounted) setState(() { _attendance = _load(); });
-                  },
+                  onPressed: _saving || !checkedIn || checkedOut
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const QrAttendanceScreen(
+                                      checkIn: false)));
+                          if (mounted)
+                            setState(() {
+                              _attendance = _load();
+                            });
+                        },
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('เช็กเอาต์'),
                 ),
@@ -549,6 +746,236 @@ class _EmployeeAttendanceCardState extends State<_EmployeeAttendanceCard> {
             ),
           );
         },
+      );
+}
+
+class _EmployeeMonthlyAttendanceCard extends StatefulWidget {
+  const _EmployeeMonthlyAttendanceCard({required this.employeeId});
+
+  final Object? employeeId;
+
+  @override
+  State<_EmployeeMonthlyAttendanceCard> createState() =>
+      _EmployeeMonthlyAttendanceCardState();
+}
+
+class _EmployeeMonthlyAttendanceCardState
+    extends State<_EmployeeMonthlyAttendanceCard> {
+  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  late Future<Map<String, int>> _summary;
+
+  @override
+  void initState() {
+    super.initState();
+    _summary = _load();
+  }
+
+  Future<Map<String, int>> _load() async {
+    final employeeId = widget.employeeId;
+    if (employeeId == null) return _emptySummary();
+    final monthEnd = DateTime(_month.year, _month.month + 1, 0);
+    final result = await Future.wait([
+      hrRepository.listEmployeeAttendanceForRange(
+        employeeId: employeeId,
+        startDate: _month,
+        endDate: monthEnd,
+      ),
+      hrRepository.listEmployeeLeave(employeeId),
+    ]);
+    final attendance = result[0];
+    final leaveRequests = result[1].where((leave) {
+      if (leave['status'] != 'Approved') return false;
+      final start = DateTime.tryParse('${leave['start_date']}');
+      final end = DateTime.tryParse('${leave['end_date']}');
+      return start != null &&
+          end != null &&
+          !start.isAfter(monthEnd) &&
+          !end.isBefore(_month);
+    });
+
+    final recordedDates = attendance
+        .map((row) => row['work_date']?.toString())
+        .whereType<String>()
+        .toSet();
+    final approvedLeaveDates = <String>{};
+    for (final leave in leaveRequests) {
+      final start = DateTime.parse('${leave['start_date']}');
+      final end = DateTime.parse('${leave['end_date']}');
+      var date = start.isBefore(_month) ? _month : start;
+      final rangeEnd = end.isAfter(monthEnd) ? monthEnd : end;
+      while (!date.isAfter(rangeEnd)) {
+        approvedLeaveDates.add(DateFormat('yyyy-MM-dd').format(date));
+        date = date.add(const Duration(days: 1));
+      }
+    }
+    final leaveDatesWithoutAttendance = approvedLeaveDates
+        .where((date) => !recordedDates.contains(date))
+        .toSet();
+
+    final today = DateTime.now();
+    final yesterday = DateTime(today.year, today.month, today.day)
+        .subtract(const Duration(days: 1));
+    final countThrough = monthEnd.isBefore(yesterday) ? monthEnd : yesterday;
+    final completedDays = countThrough.isBefore(_month) ? 0 : countThrough.day;
+    var missingDays = 0;
+    for (var day = 1; day <= completedDays; day++) {
+      final date = DateFormat('yyyy-MM-dd')
+          .format(DateTime(_month.year, _month.month, day));
+      if (!recordedDates.contains(date) &&
+          !leaveDatesWithoutAttendance.contains(date)) {
+        missingDays++;
+      }
+    }
+
+    int count(String status) =>
+        attendance.where((row) => row['status'] == status).length;
+    return {
+      'Present': count('Present'),
+      'Leave': count('Leave') + leaveDatesWithoutAttendance.length,
+      'Absent': count('Absent') + missingDays,
+      'Late': count('Late'),
+    };
+  }
+
+  Map<String, int> _emptySummary() => const {
+        'Present': 0,
+        'Leave': 0,
+        'Absent': 0,
+        'Late': 0,
+      };
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _month = DateTime(_month.year, _month.month + offset);
+      _summary = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xffffdce8)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'สรุปการทำงานของฉัน',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _changeMonth(-1),
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: 'เดือนก่อนหน้า',
+                ),
+                Text(
+                  DateFormat('MM/yyyy').format(_month),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                IconButton(
+                  onPressed: () => _changeMonth(1),
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: 'เดือนถัดไป',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<Map<String, int>>(
+              future: _summary,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: CircularProgressIndicator(),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Text('โหลดสรุปไม่สำเร็จ: ${snapshot.error}');
+                }
+                final data = snapshot.data ?? _emptySummary();
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth < 620
+                        ? (constraints.maxWidth - 12) / 2
+                        : (constraints.maxWidth - 36) / 4;
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _EmployeeStatusMetric(
+                          width: width,
+                          label: 'มาทำงาน',
+                          value: data['Present'] ?? 0,
+                          color: const Color(0xff25ad83),
+                        ),
+                        _EmployeeStatusMetric(
+                          width: width,
+                          label: 'ลา',
+                          value: data['Leave'] ?? 0,
+                          color: const Color(0xff518bd6),
+                        ),
+                        _EmployeeStatusMetric(
+                          width: width,
+                          label: 'ขาด',
+                          value: data['Absent'] ?? 0,
+                          color: const Color(0xffe45a67),
+                        ),
+                        _EmployeeStatusMetric(
+                          width: width,
+                          label: 'มาสาย',
+                          value: data['Late'] ?? 0,
+                          color: const Color(0xfff19a4b),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      );
+}
+
+class _EmployeeStatusMetric extends StatelessWidget {
+  const _EmployeeStatusMetric({
+    required this.width,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final double width;
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.09),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(
+              '$value วัน',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
       );
 }
 
@@ -708,7 +1135,9 @@ class _ProfilePage extends StatelessWidget {
                 _InfoRow(
                   icon: Icons.work_rounded,
                   label: 'ตำแหน่ง',
-                  value: position is Map ? _text(position['name']) : '-',
+                  value: position is Map
+                      ? localizedPositionName(position['name'])
+                      : '-',
                 ),
                 _InfoRow(
                   icon: Icons.groups_rounded,
@@ -817,7 +1246,7 @@ class _WelcomeBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${position is Map ? _text(position['name']) : 'พนักงาน'} • ${branch is Map ? _text(branch['branch_name']) : '-'}',
+                  '${position is Map ? localizedPositionName(position['name']) : 'พนักงาน'} • ${branch is Map ? _text(branch['branch_name']) : '-'}',
                   style: const TextStyle(color: Color(0xddffffff)),
                 ),
               ],

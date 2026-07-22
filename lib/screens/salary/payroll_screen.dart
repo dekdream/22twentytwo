@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/supabase_service.dart';
+import '../../services/excel_export.dart';
 import '../../widgets/page_scaffold.dart';
 import '../../widgets/record_cards.dart';
 
@@ -31,6 +32,13 @@ class _PayrollScreenState extends State<PayrollScreen> {
       'deduction': deduction,
       'total_salary': basic + overtime + bonus - deduction,
       'payment_date': DateTime.now().toIso8601String().substring(0, 10),
+    });
+    await hrRepository.insert('notifications', {
+      'employee_id': values['employee_id'],
+      'title': 'เงินเดือนออกแล้ว',
+      'message':
+          'เงินเดือนประจำเดือน ${values['month']}/${values['year']} พร้อมตรวจสอบแล้ว',
+      'notification_type': 'Payroll',
     });
     setState(() {});
   }
@@ -82,8 +90,17 @@ class _PayrollScreenState extends State<PayrollScreen> {
                           child: Text(_employeeLabel(employee)),
                         ),
                     ],
-                    onChanged: (value) =>
-                        setDialogState(() => selectedEmployeeId = value),
+                    onChanged: (value) {
+                      final employee = employees
+                          .where((item) => item['id']?.toString() == value)
+                          .firstOrNull;
+                      setDialogState(() {
+                        selectedEmployeeId = value;
+                        basicController.text = _salaryText(
+                          employee?['base_salary'],
+                        );
+                      });
+                    },
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -175,16 +192,60 @@ class _PayrollScreenState extends State<PayrollScreen> {
     return name.isEmpty ? code : '$name ($code)';
   }
 
+  static String _salaryText(Object? value) {
+    final amount = switch (value) {
+      num number => number.toDouble(),
+      _ => double.tryParse(value?.toString() ?? '') ?? 0,
+    };
+    return amount == amount.roundToDouble()
+        ? amount.toInt().toString()
+        : amount.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     return HrPage(
       title: 'เงินเดือน',
       subtitle: 'คำนวณเงินเดือน โบนัส หักเงิน และวันที่จ่าย',
-      action: FilledButton.icon(
-        onPressed: addPayroll,
-        icon: const Icon(Icons.add),
-        label: const Text('เพิ่ม'),
-      ),
+      action: Wrap(spacing: 8, children: [
+        OutlinedButton.icon(
+            onPressed: () async {
+              final rows = await hrRepository.listPayroll(
+                  orderBy: 'year', branchId: EmployeeSession.activeBranchId);
+              exportExcel(
+                  'payroll',
+                  [
+                    'พนักงาน',
+                    'เดือน',
+                    'ปี',
+                    'เงินเดือน',
+                    'โอที',
+                    'โบนัส',
+                    'หัก',
+                    'รวม',
+                    'วันที่จ่าย'
+                  ],
+                  rows
+                      .map((r) => [
+                            employeeDisplayName(r),
+                            r['month'],
+                            r['year'],
+                            r['basic_salary'],
+                            r['overtime'],
+                            r['bonus'],
+                            r['deduction'],
+                            r['total_salary'],
+                            r['payment_date']
+                          ])
+                      .toList());
+            },
+            icon: const Icon(Icons.file_download_outlined),
+            label: const Text('Export Excel')),
+        FilledButton.icon(
+            onPressed: addPayroll,
+            icon: const Icon(Icons.add),
+            label: const Text('เพิ่ม')),
+      ]),
       child: RecordCards(
         tableName: 'payroll',
         onChanged: () => setState(() {}),
@@ -202,7 +263,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
         ],
         builder: (context, row, onTap) => RecordCard(
           title: employeeDisplayName(row),
-          subtitle: '${row['month'] ?? '-'}/${row['year'] ?? '-'} • เงินเดือนพื้นฐาน ฿${row['basic_salary'] ?? 0}',
+          subtitle:
+              '${row['month'] ?? '-'}/${row['year'] ?? '-'} • เงินเดือนพื้นฐาน ฿${row['basic_salary'] ?? 0}',
           trailing: '฿${row['total_salary'] ?? 0}',
           icon: Icons.payments_outlined,
           onTap: onTap,

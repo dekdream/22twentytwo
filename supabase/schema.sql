@@ -42,6 +42,7 @@ create table if not exists public.employees (
   branch_id bigint references public.branches(id),
   department_id bigint references public.departments(id),
   position_id bigint references public.positions(id),
+  base_salary numeric not null default 0,
   hire_date date,
   status character varying default 'Active',
   profile_image text,
@@ -51,6 +52,9 @@ create table if not exists public.employees (
 -- Keeps existing installations compatible with the new branches table.
 alter table public.employees
   add column if not exists branch_id bigint references public.branches(id);
+
+alter table public.employees
+  add column if not exists base_salary numeric not null default 0;
 
 create table if not exists public.attendance (
   id bigint generated always as identity primary key,
@@ -113,6 +117,32 @@ create table if not exists public.announcements (
   detail text,
   created_at timestamp without time zone default now()
 );
+
+create table if not exists public.calendar_events (
+  id bigint generated always as identity primary key,
+  title varchar(150) not null,
+  detail text,
+  event_type varchar(30) default 'Work',
+  start_date date not null,
+  end_date date not null,
+  branch_id bigint references public.branches(id),
+  employee_id uuid references public.employees(id),
+  created_at timestamp without time zone default now()
+);
+
+create table if not exists public.notifications (
+  id bigint generated always as identity primary key,
+  employee_id uuid references public.employees(id),
+  title varchar(150) not null,
+  message text,
+  notification_type varchar(30) default 'General',
+  is_read boolean default false,
+  created_at timestamp without time zone default now()
+);
+
+alter table public.leave_requests add column if not exists reviewed_by uuid references public.employees(id);
+alter table public.leave_requests add column if not exists reviewed_at timestamp without time zone;
+alter table public.leave_requests add column if not exists review_note text;
 
 create table if not exists public.services (
   id bigint generated always as identity primary key,

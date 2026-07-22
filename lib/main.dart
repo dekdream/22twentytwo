@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/announcement/announcement_screen.dart';
 import 'screens/attendance/attendance_screen.dart';
@@ -13,16 +14,18 @@ import 'screens/employee/employee_portal_screen.dart';
 import 'screens/leave/leave_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/login/management_area_screen.dart';
-import 'screens/position/position_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/salary/payroll_screen.dart';
 import 'screens/service/commission_screen.dart';
 import 'screens/service/service_history_screen.dart';
+import 'screens/report/report_screen.dart';
+import 'screens/calendar/calendar_screen.dart';
 import 'services/supabase_service.dart';
 import 'widgets/app_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('th');
   await SupabaseService.initialize();
   runApp(const ProviderScope(child: HrApp()));
 }
@@ -62,11 +65,11 @@ class HrApp extends ConsumerWidget {
           '/customers',
           '/branches',
           '/announcements',
+          '/reports',
         };
         const employeePaths = {
           '/employees',
           '/departments',
-          '/positions',
           '/commissions',
           '/profile',
           '/attendance',
@@ -116,8 +119,6 @@ class HrApp extends ConsumerWidget {
             GoRoute(
                 path: '/customers', builder: (_, __) => const CustomerScreen()),
             GoRoute(
-                path: '/positions', builder: (_, __) => const PositionScreen()),
-            GoRoute(
                 path: '/attendance',
                 builder: (_, __) => const AttendanceScreen()),
             GoRoute(path: '/leave', builder: (_, __) => const LeaveScreen()),
@@ -136,6 +137,9 @@ class HrApp extends ConsumerWidget {
             GoRoute(
                 path: '/announcements',
                 builder: (_, __) => const AnnouncementScreen()),
+            GoRoute(path: '/reports', builder: (_, __) => const ReportScreen()),
+            GoRoute(
+                path: '/calendar', builder: (_, __) => const CalendarScreen()),
             GoRoute(
                 path: '/profile', builder: (_, __) => const ProfileScreen()),
           ],

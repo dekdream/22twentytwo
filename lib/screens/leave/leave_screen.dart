@@ -13,6 +13,40 @@ class LeaveScreen extends StatefulWidget {
 }
 
 class _LeaveScreenState extends State<LeaveScreen> {
+  Future<void> _review(Map<String, dynamic> row) async {
+    final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('อนุมัติคำขอลางาน'),
+              content: Text(
+                  '${employeeDisplayName(row)}\n${row['start_date']} ถึง ${row['end_date']}\n${row['reason'] ?? '-'}'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('ปิด')),
+                OutlinedButton(
+                    onPressed: () => Navigator.pop(context, 'Rejected'),
+                    child: const Text('ไม่อนุมัติ')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, 'Approved'),
+                    child: const Text('อนุมัติ'))
+              ],
+            ));
+    if (result == null) return;
+    await hrRepository.update('leave_requests', row['id'], {
+      'status': result,
+    });
+    await hrRepository.insert('notifications', {
+      'employee_id': row['employee_id'],
+      'title': result == 'Approved'
+          ? 'อนุมัติการลาแล้ว'
+          : 'คำขอลาไม่ได้รับการอนุมัติ',
+      'message': 'คำขอลาวันที่ ${row['start_date']} ถึง ${row['end_date']}',
+      'notification_type': 'Leave'
+    });
+    if (mounted) setState(() {});
+  }
+
   Future<void> addLeave() async {
     final employees = await hrRepository.listEmployees(
       orderBy: 'first_name',
@@ -66,8 +100,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
   }
 
   static String _employeeLabel(Map<String, dynamic> employee) {
-    final name = '${employee['first_name'] ?? ''} ${employee['last_name'] ?? ''}'
-        .trim();
+    final name =
+        '${employee['first_name'] ?? ''} ${employee['last_name'] ?? ''}'.trim();
     final code = employee['employee_code']?.toString() ?? '-';
     return name.isEmpty ? code : '$name ($code)';
   }
@@ -76,14 +110,14 @@ class _LeaveScreenState extends State<LeaveScreen> {
     List<Map<String, dynamic>> employees,
     String employeeId,
   ) {
-    final match = employees.where((employee) =>
-        employee['id']?.toString() == employeeId);
+    final match =
+        employees.where((employee) => employee['id']?.toString() == employeeId);
     if (match.isEmpty) return employeeId;
 
     final employee = match.first;
     final code = employee['employee_code']?.toString() ?? '-';
-    final name = '${employee['first_name'] ?? ''} ${employee['last_name'] ?? ''}'
-        .trim();
+    final name =
+        '${employee['first_name'] ?? ''} ${employee['last_name'] ?? ''}'.trim();
     return name.isEmpty ? code : '$code - $name';
   }
 
@@ -116,6 +150,7 @@ class _LeaveScreenState extends State<LeaveScreen> {
           'leave_requests',
           orderBy: 'created_at',
           branchId: EmployeeSession.activeBranchId,
+          employeeForeignKey: 'leave_requests_employee_id_fkey',
         ),
         columns: const [
           DataColumn(label: Text('Employee')),
@@ -130,7 +165,7 @@ class _LeaveScreenState extends State<LeaveScreen> {
           subtitle: '${row['start_date'] ?? '-'} - ${row['end_date'] ?? '-'}',
           trailing: '${row['status'] ?? 'Pending'}',
           icon: Icons.event_note_outlined,
-          onTap: onTap,
+          onTap: () => _review(row),
         ),
       ),
     );
