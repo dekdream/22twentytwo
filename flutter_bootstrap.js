@@ -9,8 +9,17 @@ if (!window._flutter) {
 _flutter.buildConfig = {"engineRevision":"edd8546116457bdf1c5bdfb13ecb9463d2bb5ed4","builds":[{"compileTarget":"dart2js","renderer":"auto","mainJsPath":"main.dart.js"}]};
 
 
-_flutter.loader.load({
-  serviceWorkerSettings: {
-    serviceWorkerVersion: "3367491394"
+async function clearOldFlutterCache() {
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
   }
-});
+  if ('caches' in window) {
+    const names = await caches.keys();
+    await Promise.all(names.map((name) => caches.delete(name)));
+  }
+}
+
+clearOldFlutterCache()
+  .catch((error) => console.warn('Could not clear old Flutter cache', error))
+  .then(() => _flutter.loader.load());
